@@ -90,24 +90,59 @@
     <p>&copy; 2026 FlightFinder. All rights reserved.</p>
   </footer>
   <script>
-    const RENDER_SERVER_URL = 'https://flight-finderr.onrender.com'; // Replace with your actual Render server URL
+  const RENDER_SERVER_URL = 'https://flight-finderr.onrender.com';
 
     // Update fetch URLs to use the Render server
-    const AUTOCOMPLETE_URL = `${RENDER_SERVER_URL}/api/autocomplete`;
+
+    // Use Amadeus API for both autocomplete and flight search
+    const AUTOCOMPLETE_URL = `${RENDER_SERVER_URL}/api/amadeus-autocomplete`;
     const FLIGHTS_URL = `${RENDER_SERVER_URL}/api/flights`;
 
-    async function fetchSuggestions(term) {
-      if (!term || term.length < 1) return [];
-      try {
-        const params = new URLSearchParams({ term });
-        const res = await fetch(`${AUTOCOMPLETE_URL}?${params.toString()}`);
-        if (!res.ok) return [];
-        const json = await res.json();
-        return Array.isArray(json) ? json : [];
-      } catch (err) {
-        return [];
-      }
+    // --- Amadeus Autocomplete ---
+    function setupAutocomplete(inputId) {
+      const input = document.getElementById(inputId);
+      let dropdown;
+      input.addEventListener('input', async function() {
+        const term = input.value.trim();
+        if (term.length < 2) {
+          if (dropdown) dropdown.remove();
+          return;
+        }
+        try {
+          const params = new URLSearchParams({ keyword: term });
+          const res = await fetch(`${RENDER_SERVER_URL}/api/autocomplete?${params.toString()}`);
+          const data = await res.json();
+          if (dropdown) dropdown.remove();
+          dropdown = document.createElement('ul');
+          dropdown.className = 'autocomplete-list';
+          (data.data || data).forEach(item => {
+            // Amadeus returns type: 'location', subType: 'AIRPORT' or 'CITY'
+            const label = `${item.name} (${item.iataCode})${item.address && item.address.countryName ? ', ' + item.address.countryName : ''}`;
+            const li = document.createElement('li');
+            li.className = 'autocomplete-item';
+            li.textContent = label;
+            li.dataset.iata = item.iataCode;
+            li.addEventListener('mousedown', function(e) {
+              input.value = label;
+              input.dataset.iata = item.iataCode;
+              dropdown.remove();
+            });
+            dropdown.appendChild(li);
+          });
+          if ((data.data || data).length > 0) {
+            input.parentNode.appendChild(dropdown);
+          }
+        } catch (err) {
+          if (dropdown) dropdown.remove();
+        }
+      });
+      input.addEventListener('blur', function() {
+        setTimeout(() => { if (dropdown) dropdown.remove(); }, 100);
+      });
     }
+
+    setupAutocomplete('origin');
+    setupAutocomplete('destination');
 
     document.getElementById('flight-form').addEventListener('submit', async function(e) {
       e.preventDefault();
@@ -173,3 +208,4 @@
   </script>
 </body>
 </html>
+
