@@ -5,20 +5,41 @@ const axios = require('axios');
 const cors = require('cors');
 const app = express();
 const PORT = process.env.PORT || 3001;
-const API_KEY = process.env.API_KEY || 'd2e27a08557382081d80ed4268fbb552';
 
 app.use(cors());
 app.use(express.json());
 
-// Proxy endpoint for Travelpayouts autocomplete
+// Proxy endpoint for Amadeus Airport & City Search autocomplete
 app.get('/api/autocomplete', async (req, res) => {
-  const { term } = req.query;
-  const url = `https://autocomplete.travelpayouts.com/places2?term=${encodeURIComponent(term)}&locale=en&types[]=city&types[]=airport&token=${API_KEY}`;
+  const { keyword } = req.query;
+  if (!keyword || keyword.length < 2) {
+    return res.json([]);
+  }
   try {
-    const response = await axios.get(url);
+    // Get Amadeus access token
+    const tokenResponse = await axios.post('https://test.api.amadeus.com/v1/security/oauth2/token',
+      new URLSearchParams({
+        grant_type: 'client_credentials',
+        client_id: process.env.AMADEUS_CLIENT_ID,
+        client_secret: process.env.AMADEUS_CLIENT_SECRET
+      }),
+      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+    );
+    const access_token = tokenResponse.data.access_token;
+
+    // Call Amadeus Airport & City Search API
+    const params = new URLSearchParams({
+      keyword,
+      subType: 'AIRPORT,CITY',
+      'page[limit]': 8
+    });
+    const amadeusUrl = `https://test.api.amadeus.com/v1/reference-data/locations?${params.toString()}`;
+    const response = await axios.get(amadeusUrl, {
+      headers: { Authorization: `Bearer ${access_token}` }
+    });
     res.json(response.data);
   } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch autocomplete suggestions', details: err.message });
+    res.status(500).json({ error: 'Failed to fetch Amadeus autocomplete', details: err.message });
   }
 });
 
@@ -66,3 +87,4 @@ app.get('/api/flights', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Amadeus backend running on port ${PORT}`);
 });
+
